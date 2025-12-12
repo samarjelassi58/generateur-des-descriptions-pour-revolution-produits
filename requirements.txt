@@ -1,0 +1,10 @@
+# Web Scraping
+beautifulsoup4==4.12.2
+requests==2.31.0
+lxml==4.9.3
+
+# Data Processing
+pandas==2.1.4
+
+# Utilities & Progress
+tqdm==4.66.1
