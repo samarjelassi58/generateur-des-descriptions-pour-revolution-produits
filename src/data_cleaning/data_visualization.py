@@ -1,23 +1,60 @@
+"""
+Script de visualisation des données de produits Revolution Beauty
+
+Ce script génère des visualisations interactives avec Plotly pour :
+- Analyser la répartition des catégories et sous-catégories
+- Visualiser les distributions de prix
+- Examiner les notes et avis
+- Analyser les promotions et réductions
+- Étudier les variantes de produits
+
+Input: data/produits.csv
+Output: Fichier HTML interactif avec tous les graphiques
+
+Auteur: Samar Jelassi
+Date: Décembre 2025
+"""
+
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import plotly.io as pio
 
-# ---------------- CHARGEMENT ---------------- #
+# =============================================================================
+# CHARGEMENT DES DONNÉES
+# =============================================================================
+
 df = pd.read_csv("data/produits.csv")
 
-# ---------------- NETTOYAGE RAPIDE DES COLONNES NUMÉRIQUES ---------------- #
+# =============================================================================
+# FONCTIONS DE NETTOYAGE
+# =============================================================================
+
 def parse_price(x):
+    """
+    Convertit une chaîne de prix en valeur numérique.
+    
+    Args:
+        x: Prix au format texte (ex: "€12,99")
+        
+    Returns:
+        float: Prix en format numérique ou None si invalide
+    """
     try:
         return float(str(x).replace('€','').replace(',','.'))
     except:
         return None
 
-df['price_sale'] = df['price_sale'].apply(parse_price)
-df['price_original'] = df['price_original'].apply(parse_price)
-df['rating'] = pd.to_numeric(df['rating'], errors='coerce')
-
-# Extraire les 3 niveaux de catégories depuis breadcrumbs
 def extract_categories(breadcrumb):
+    """
+    Extrait les 3 niveaux de catégories depuis les breadcrumbs.
+    
+    Args:
+        breadcrumb (str): Breadcrumb au format "Cat1 > Cat2 > Cat3"
+        
+    Returns:
+        tuple: (categorie, sous_categorie, sous_sous_categorie)
+    """
     if pd.isna(breadcrumb):
         return 'Unknown', 'Unknown', 'Unknown'
     
@@ -28,11 +65,24 @@ def extract_categories(breadcrumb):
     
     return cat1, cat2, cat3
 
+# =============================================================================
+# NETTOYAGE DES DONNÉES
+# =============================================================================
+
+# Conversion des prix
+df['price_sale'] = df['price_sale'].apply(parse_price)
+df['price_original'] = df['price_original'].apply(parse_price)
+df['rating'] = pd.to_numeric(df['rating'], errors='coerce')
+
+# Extraction des catégories
 df[['categorie', 'sous_categorie', 'sous_sous_categorie']] = df['breadcrumbs'].apply(
     lambda x: pd.Series(extract_categories(x))
 )
 
-# ---------------- CONFIGURATION THÈME ---------------- #
+# =============================================================================
+# CONFIGURATION DU THÈME
+# =============================================================================
+
 theme_colors = {
     'primary': '#6366f1',
     'secondary': '#ec4899',
@@ -42,10 +92,15 @@ theme_colors = {
     'info': '#06b6d4'
 }
 
-# ---------------- GRAPHIQUES UTILES POUR NETTOYAGE ---------------- #
+# =============================================================================
+# GÉNÉRATION DES GRAPHIQUES
+# =============================================================================
+
 figs = []
 
-# 1️⃣ Catégories principales (Pie chart avec pourcentages)
+# -----------------------------------------------------------------------------
+# 1. RÉPARTITION DES CATÉGORIES PRINCIPALES
+# -----------------------------------------------------------------------------
 cat_counts = df['categorie'].value_counts().reset_index()
 cat_counts.columns = ['categorie', 'count']
 cat_counts['percentage'] = (cat_counts['count'] / cat_counts['count'].sum() * 100).round(1)
@@ -71,8 +126,9 @@ fig_categorie.update_layout(
 )
 figs.append(fig_categorie)
 
-# 1.2️⃣ Sous-catégories par catégorie principale
-import plotly.graph_objects as go
+# -----------------------------------------------------------------------------
+# 2. SOUS-CATÉGORIES PAR CATÉGORIE PRINCIPALE
+# -----------------------------------------------------------------------------
 
 for categorie in df['categorie'].unique():
     if categorie != 'Unknown':
@@ -104,7 +160,10 @@ for categorie in df['categorie'].unique():
         )
         figs.append(fig_sous_cat)
 
-# 1.3️⃣ Sunburst : Vue hiérarchique complète
+# -----------------------------------------------------------------------------
+# 3. VUE HIÉRARCHIQUE COMPLÈTE (SUNBURST)
+# -----------------------------------------------------------------------------
+
 fig_sunburst = px.sunburst(
     df[df['categorie'] != 'Unknown'],
     path=['categorie', 'sous_categorie', 'sous_sous_categorie'],
@@ -119,7 +178,10 @@ fig_sunburst.update_layout(
 )
 figs.append(fig_sunburst)
 
-# 2️⃣ Valeurs manquantes par colonne
+# -----------------------------------------------------------------------------
+# 4. VALEURS MANQUANTES PAR COLONNE
+# -----------------------------------------------------------------------------
+
 missing = df.isna().sum().reset_index()
 missing.columns = ['Colonne', 'Valeurs manquantes']
 
@@ -138,7 +200,10 @@ fig_missing.update_layout(
 )
 figs.append(fig_missing)
 
-# 3️⃣ Produits avec/sans images
+# -----------------------------------------------------------------------------
+# 5. PRODUITS AVEC/SANS IMAGES
+# -----------------------------------------------------------------------------
+
 df['has_images'] = df['images'].notna() & (df['images'].str.len() > 0)
 image_counts = df['has_images'].value_counts().reset_index()
 image_counts.columns = ['has_images', 'count']
@@ -160,7 +225,10 @@ fig_images.update_layout(
 )
 figs.append(fig_images)
 
-# 5️⃣ Détection de produits dupliqués
+# -----------------------------------------------------------------------------
+# 6. DÉTECTION DE PRODUITS DUPLIQUÉS
+# -----------------------------------------------------------------------------
+
 duplicates_name = df[df.duplicated(subset=['name'], keep=False)]
 duplicates_url = df[df.duplicated(subset=['url'], keep=False)]
 
@@ -190,7 +258,9 @@ fig_duplicates.update_layout(
 )
 figs.append(fig_duplicates)
 
-# 6️⃣ Distribution des prix
+# -----------------------------------------------------------------------------
+# 7. DISTRIBUTION DES PRIX
+# -----------------------------------------------------------------------------
 df_with_price = df[df['price_sale'].notna()]
 fig_price_dist = px.histogram(
     df_with_price,
@@ -230,9 +300,13 @@ fig_desc.update_layout(
 )
 figs.append(fig_desc)
 
-# ---------------- EXPORT HTML AVEC DESIGN MODERNE ---------------- #
+# =============================================================================
+# EXPORT HTML
+# =============================================================================
+
 html_file = "nettoyage_produits.html"
 
+# En-tête HTML avec styles modernes
 html_header = """<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -388,9 +462,12 @@ with open(html_file, 'w', encoding='utf-8') as f:
     # Graphiques individuels
     for i, fig in enumerate(figs):
         f.write('<div class="chart-container">')
-        f.write(pio.to_html(fig, full_html=False, include_plotlyjs='cdn' if i == 0 else False))
+        f.write(pio.to_html(fig, full_html=False, include_plotlyjs='cdn' if i == 0 else False)) # type: ignore
         f.write('</div>')
     
     f.write(html_footer)
 
 print(f"✅ Fichier HTML de nettoyage généré : {html_file}")
+print(f"📊 {len(figs)} graphiques créés")
+print(f"📁 Total produits analysés : {len(df)}")
+print(f"✨ Visualisation terminée avec succès!")
